@@ -3,25 +3,29 @@
 #include <exception>
 #include <cctype>
 #include <string>
+#include <iterator>
+
+// This file contains a set of low-level routines for parsing the various 
+// constructs in an XML document.
 
 namespace intxml
 {
     template <typename chptr_t>
-    bool eof(chptr_t& c)
+    bool end(chptr_t& c)
     {
-        return std::char_traits<chptr_t>::eof() == *c;
+        return *c == 0;
     }
 
     template <typename chptr_t>
     class name_ptr
     {
-        chptr_t& c;
-        enum { first, rest } state;
+        chptr_t c;
+        enum { first, rest, end } state;
 
     public:
-        typedef typename std::remove_pointer<chptr_t>::type char_type;
+        typedef typename std::iterator_traits<chptr_t>::value_type char_type;
 
-        name_ptr(chptr_t& c) : c(c), state(first) {}
+        name_ptr(chptr_t c) : c(c), state(first) {}
 
         char_type operator*()
         {
@@ -39,8 +43,14 @@ namespace intxml
                     *c == '-' ||
                     *c == '_' ||
                     *c == ':') return *c;
-                    return *c;
-                else return std::char_traits<chptr_t>::eof();
+                else
+                {
+                    state = end;
+                    return 0;
+                }
+
+            default:
+                return 0;
             }
         }
 
@@ -49,14 +59,78 @@ namespace intxml
             switch (state)
             {
             case first:
-                c++; state = rest; break;
-
+                state = rest;
+            
             case rest:
-                c++; state = rest; break;
+                c++; break;
+
+            case end: break;
             }
+            return *this;
         }
 
-        name_ptr operator++(int) { name_ptr tmp(*this); operator++(); return tmp; }
+        name_ptr operator++(int)
+        {
+            name_ptr tmp(*this); 
+            operator++(); 
+            return tmp;
+        }
+    };
+
+    template <typename chptr_t>
+    class attribute_value_ptr
+    {
+        typedef typename std::iterator_traits<chptr_t>::value_type char_type;
+
+        chptr_t c;
+        enum { squote, dquote, end } state;
+
+    public:
+        attribute_value_ptr(chptr_t ptr) : c(ptr)
+        {
+            if (*c == '\'')
+            {
+                state = squote;
+            }
+            else if (*c == '"')
+            {
+                state = dquote;
+            }
+            else throw parsing_exception(c);
+
+            operator++();
+        }
+
+        char_type operator*()
+        {
+            if (state == end) return 0;
+            else return *c;
+        }
+
+        attribute_value_ptr& operator++()
+        {
+            switch (state)
+            {
+            case squote:
+                if (*++c == '\'') state = end;
+                break;
+
+            case dquote:
+                if (*++c == '"') state = end;
+                break;
+
+            case end:
+                break;
+            }
+            return *this;
+        }
+
+        attribute_value_ptr operator++(int)
+        {
+            attribute_value_ptr tmp(*this);
+            operator++();
+            return tmp;
+        }
     };
 
     class parsing_exception : public std::exception
@@ -94,7 +168,7 @@ namespace intxml
             *c == '_' || 
             *c == ':')
         {
-            if (eof(c)) throw parsing_exception(c);
+            if (end(c)) throw parsing_exception(c);
             c++;
         }
     }
@@ -104,6 +178,21 @@ namespace intxml
     void parse_start_tag_name(chptr_t& c)
     {
         parse_name(c);
+    }
+
+    template <typename chptr_t>
+    bool parse_start_tag_name_end(chptr_t& c)
+    {
+        parse_name(c);
+        parse_whitespace(c);
+        return parse_start_tag_attribute_end(c);
+    }
+
+    template <typename chptr_t>
+    bool parse_start_tag_attribute_end(chptr_t& c)
+    {
+        parse_attributes(c);
+        return parse_start_tag_end(c);
     }
 
     // Parses the next attribute name by calling the supplied handler with an object that provides transparent access to the characters in the name.
@@ -122,7 +211,7 @@ namespace intxml
 
         do
         {
-            if (eof(c)) throw parsing_exception(c);
+            if (end(c)) throw parsing_exception(c);
             c++;
         } while (*c != start);
 
@@ -135,7 +224,7 @@ namespace intxml
     {
         while (*c != '/' && *c != '>')
         {
-            if (eof(c)) throw parsing_exception(c);
+            if (end(c)) throw parsing_exception(c);
             c++;
         }
 
@@ -154,7 +243,7 @@ namespace intxml
     {
         while (*c != '<' && *c != '>')
         {
-            if (eof(c)) throw parsing_exception(c);
+            if (end(c)) throw parsing_exception(c);
             c++;
         }
     }
@@ -195,7 +284,7 @@ namespace intxml
         {
             while (*c != '?')
             {
-                if (eof(c)) throw parsing_exception(c);
+                if (end(c)) throw parsing_exception(c);
                 c++;
             }
 
@@ -213,7 +302,7 @@ namespace intxml
         {
             while (*c != '-')
             {
-                if (eof(c)) throw parsing_exception(c);
+                if (end(c)) throw parsing_exception(c);
                 c++;
             }
 
@@ -233,7 +322,7 @@ namespace intxml
     {
         while (*c != '>')
         {
-            if (eof(c)) throw parsing_exception(c);
+            if (end(c)) throw parsing_exception(c);
             c++;
         }
         c++;
@@ -272,11 +361,34 @@ namespace intxml
     template <typename chptr_t>
     void parse_whitespace(chptr_t& c)
     {
-        while (!eof(c) && std::isspace(*c)) c++;
+        while (!end(c) && std::isspace(*c)) c++;
     }
 
     template <typename chptr_t>
     void parse_element_content(chptr_t& c)
+    {
+        while (true)
+        {
+            if (parse_element_text(c))
+            {
+                parse_element_name_end(c);
+            }
+            else
+            {
+                parse<'/'>(c);
+                parse_name(c);
+                parse<'>'>(c);
+                break;
+            }
+        }
+    }
+
+    // Returns true if more content remains in the element.  Upon returning 
+    // false, c points to the beginning of the name of the closing tag 
+    // (following the "</" sequence).  Upon returning true, c points to the
+    // beginning of the tag name of the next child element.
+    template <typename chptr_t>
+    bool parse_element_text(chptr_t& c)
     {
         while (true)
         {
@@ -287,10 +399,7 @@ namespace intxml
 
             if (*c == '/')
             {
-                c++;
-                parse_name(c);
-                parse<'>'>(c);
-                break;
+                return false;
             }
             else if (*c == '!')
             {
@@ -298,7 +407,7 @@ namespace intxml
                 parse<'-'>(c);
                 parse_comment_dash_content_end(c);
             }
-            else parse_element_name_end(c);
+            else return true;
         }
     }
 
@@ -306,6 +415,13 @@ namespace intxml
     void parse_element_name_end(chptr_t& c)
     {
         parse_name(c);
+        parse_whitespace(c);
+        return parse_element_attribute_end(c);
+    }
+
+    template <typename chptr_t>
+    void parse_element_attribute_end(chptr_t& c)
+    {
         parse_attributes(c);
         if (parse_start_tag_end(c)) parse_element_content(c);
     }

@@ -12,6 +12,53 @@ namespace intxml
         return std::char_traits<chptr_t>::eof() == *c;
     }
 
+    template <typename chptr_t>
+    class name_ptr
+    {
+        chptr_t& c;
+        enum { first, rest } state;
+
+    public:
+        typedef typename std::remove_pointer<chptr_t>::type char_type;
+
+        name_ptr(chptr_t& c) : c(c), state(first) {}
+
+        char_type operator*()
+        {
+            switch (state)
+            {
+            case first:
+                if (!std::isalpha(*c) && *c != '_') throw parsing_exception(c);
+                return *c;
+
+            case rest:
+                if (
+                    std::isalpha(*c) ||
+                    std::isdigit(*c) ||
+                    *c == '.' ||
+                    *c == '-' ||
+                    *c == '_' ||
+                    *c == ':') return *c;
+                    return *c;
+                else return std::char_traits<chptr_t>::eof();
+            }
+        }
+
+        name_ptr& operator++()
+        {
+            switch (state)
+            {
+            case first:
+                c++; state = rest; break;
+
+            case rest:
+                c++; state = rest; break;
+            }
+        }
+
+        name_ptr operator++(int) { name_ptr tmp(*this); operator++(); return tmp; }
+    };
+
     class parsing_exception : public std::exception
     {
     public:
@@ -171,7 +218,11 @@ namespace intxml
             }
 
             c++;
-            if (*c == '-') break;
+            if (*c == '-')
+            {
+                c++;
+                break;
+            }
         }
 
         parse<'>'>(c);
@@ -240,6 +291,12 @@ namespace intxml
                 parse_name(c);
                 parse<'>'>(c);
                 break;
+            }
+            else if (*c == '!')
+            {
+                c++;
+                parse<'-'>(c);
+                parse_comment_dash_content_end(c);
             }
             else parse_element_name_end(c);
         }

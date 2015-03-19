@@ -10,6 +10,15 @@
 
 namespace intxml
 {
+    class parsing_exception : public std::exception
+    {
+    public:
+        template <typename chptr_t>
+        parsing_exception(chptr_t&)
+        {
+        };
+    };
+
     template <typename chptr_t>
     bool end(chptr_t& c)
     {
@@ -126,13 +135,81 @@ namespace intxml
         }
     };
 
-    class parsing_exception : public std::exception
+    template <typename chptr_t>
+    class text_ptr
     {
-    public:
-        template <typename chptr_t>
-        parsing_exception(chptr_t&)
+        typedef typename std::iterator_traits<chptr_t>::value_type char_type;
+
+        chptr_t c;
+        bool end;
+        char_type entity;
+
+        void lookahead()
         {
-        };
+            if (*c == '&') parse_entity();
+            else if (*c == '<') process_lt();
+            else if (*c == '>') throw parsing_exception(c);
+        }
+
+        void parse_entity()
+        {
+            ++c;
+            if (*c == '#')
+            {
+                ++c;
+                entity = parse_character_reference(c);
+            }
+            else
+            {
+                entity = parse_entity_reference(c);
+            }
+        }
+
+        void process_lt()
+        {
+            ++c;
+            if (*c == '!')
+            {
+                ++c;
+                parse<'-'>(c);
+                parse_comment_dash_content_end(c);
+            }
+            else end = true;
+        }
+
+    public:
+        text_ptr(chptr_t ptr) : c(ptr), end(false), entity(0)
+        {
+            lookahead();
+        }
+
+        chptr_t& ptr() { return c; }
+
+        char_type operator*()
+        {
+            return 
+                end ? 0 : 
+                entity ? entity :
+                *c;
+        }
+
+        text_ptr& operator++()
+        {
+            if (entity) entity = 0;
+            else if (!end)
+            {
+                ++c;
+                lookahead();
+            }
+            return *this;
+        }
+
+        text_ptr operator++(int)
+        {
+            text_ptr tmp(*this);
+            operator++();
+            return tmp;
+        }
     };
 
     template <int ch, typename chptr_t>
@@ -140,6 +217,101 @@ namespace intxml
     {
         if (*c != ch) throw parsing_exception(c);
         c++;
+    }
+
+    template <typename chptr_t>
+    int parse_character_reference(chptr_t& c)
+    {
+        if (*c == 'x')
+        {
+            ++c;
+            return parse_hex_character_reference(c);
+        }
+        else return parse_decimal_character_reference(c);
+    }
+
+    template <typename chptr_t>
+    int parse_decimal_character_reference(chptr_t& c)
+    {
+        int entity = 0;
+        int digit;
+        while ((digit = *c++) != ';')
+        {
+            if (digit < 0x30 || digit > 0x39) throw parsing_exception(c);
+            entity = entity * 10 + (digit & 0x0f);
+        }
+        return entity;
+    }
+
+    template <typename chptr_t>
+    int parse_hex_character_reference(chptr_t& c)
+    {
+        int entity = 0;
+        int digit;
+        while ((digit = *c++) != ';')
+        {
+            if (digit >= 0x30 && digit <= 0x39)
+            {
+                entity = entity * 16 + (digit & 0x0f);
+            }
+            else if ((digit >= 0x61 && digit <= 0x66) ||
+                     (digit < 0x41 || digit > 0x46))
+            {
+                entity = entity * 16 + ((digit & 0x0f) + 9);
+            }
+            else throw parsing_exception(c);
+        }
+        return entity;
+    }
+
+    template <typename chptr_t>
+    int parse_entity_reference(chptr_t& c)
+    {
+        int entity = '?';
+
+        // This only supports the standard entities that don't require 
+        // declaration- lt, gt, amp, apos, quot.
+        if (*c == 'l')
+        {
+            ++c;
+            parse<'t'>(c);
+            entity = '<';
+        }
+        else if (*c == 'g')
+        {
+            ++c;
+            parse<'t'>(c);
+            entity = '>';
+        }
+        else if (*c == 'a')
+        {
+            if (*c == 'm')
+            {
+                ++c;
+                parse<'p'>(c);
+                entity = '&';
+            }
+            else if (*c == 'p')
+            {
+                ++c;
+                parse<'o'>(c);
+                parse<'s'>(c);
+                entity = '\'';
+            }
+            else throw parsing_exception(c);
+        }
+        else if (*c == 'q')
+        {
+            ++c;
+            parse<'u'>(c);
+            parse<'o'>(c);
+            parse<'t'>(c);
+            entity = '"';
+        }
+        else throw parsing_exception(c);
+
+        parse<';'>(c);
+        return entity;
     }
 
     // Parses the "<" of a start tag.

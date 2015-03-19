@@ -17,6 +17,7 @@ namespace intxml { namespace parser
         parser_exception(const chptr_t& p) {}
     };
 
+    // Declaration of all parser state objects
     template <typename chptr_t> class document;
     template <typename chptr_t> class element;
     template <typename chptr_t> class attribute;
@@ -35,7 +36,21 @@ namespace intxml { namespace parser
 
         // Parses the content up to the next element or close tag and 
         // returns the element (possibly representing the close tag).
-        element<chptr_t> sibling();
+        element<chptr_t> sibling()
+        {
+            chptr_t pnew(p);
+            parse_element_text(pnew);
+            return element<chptr_t>(pnew);
+        }
+
+        template <typename handler>
+        element<chptr_t> sibling(handler h)
+        {
+            text_ptr<chptr_t> tp(p);
+            h(tp);
+            while (*tp++);
+            return element<chptr_t>(tp.ptr());
+        }
     };
 
     // Just before the value part of an attribute
@@ -150,9 +165,19 @@ namespace intxml { namespace parser
     public:
         element(chptr_t ptr) : p(ptr) {}
 
+        enum next_types { element_name, close_tag, end_of_doc };
+
         // Returns true only if there are elements remaining in the content 
         // of the parent element.
-        bool has_more() { return *p != '/'; }
+        next_types next()
+        {
+            switch (*p)
+            {
+            case '/': return close_tag;
+            case 0: return end_of_doc;
+            default: return element_name;
+            }
+        }
 
         // Parse the name and return the first attribute
         attribute<chptr_t> name()
@@ -173,6 +198,16 @@ namespace intxml { namespace parser
             while (*np++);
             parse_whitespace(pnew);
             return attribute<chptr_t>(pnew);
+        }
+
+        // Parses the close tag and returns the following content
+        content<chptr_t> close()
+        {
+            chptr_t pnew(p);
+            parse<'/'>(pnew);
+            parse_name(pnew);
+            parse<'>'>(pnew);
+            return content<chptr_t>(pnew);
         }
     };
 

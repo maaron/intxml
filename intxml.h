@@ -20,51 +20,34 @@ namespace intxml
     class name_ptr
     {
         chptr_t c;
-        enum { first, rest, end } state;
+        bool end;
 
     public:
         typedef typename std::iterator_traits<chptr_t>::value_type char_type;
 
-        name_ptr(chptr_t c) : c(c), state(first) {}
+        name_ptr(chptr_t ptr) : c(ptr), end(false)
+        {
+            if (!std::isalpha(*c) && *c != '_') throw parsing_exception(c);
+        }
+
+        chptr_t& ptr() { return c; }
 
         char_type operator*()
         {
-            switch (state)
-            {
-            case first:
-                if (!std::isalpha(*c) && *c != '_') throw parsing_exception(c);
-                return *c;
-
-            case rest:
-                if (
-                    std::isalpha(*c) ||
-                    std::isdigit(*c) ||
-                    *c == '.' ||
-                    *c == '-' ||
-                    *c == '_' ||
-                    *c == ':') return *c;
-                else
-                {
-                    state = end;
-                    return 0;
-                }
-
-            default:
-                return 0;
-            }
+            return end ? 0 : *c;
         }
 
         name_ptr& operator++()
         {
-            switch (state)
+            if (!end)
             {
-            case first:
-                state = rest;
-            
-            case rest:
-                c++; break;
-
-            case end: break;
+                ++c;
+                if (!std::isalpha(*c) &&
+                    !std::isdigit(*c) &&
+                    *c != '.' &&
+                    *c != '-' &&
+                    *c != '_' &&
+                    *c != ':') end = true;
             }
             return *this;
         }
@@ -101,6 +84,8 @@ namespace intxml
             operator++();
         }
 
+        chptr_t& ptr() { return c; }
+
         char_type operator*()
         {
             if (state == end) return 0;
@@ -112,11 +97,19 @@ namespace intxml
             switch (state)
             {
             case squote:
-                if (*++c == '\'') state = end;
+                if (*++c == '\'')
+                {
+                    ++c;
+                    state = end;
+                }
                 break;
 
             case dquote:
-                if (*++c == '"') state = end;
+                if (*++c == '"')
+                {
+                    ++c;
+                    state = end;
+                }
                 break;
 
             case end:

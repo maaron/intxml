@@ -6,7 +6,7 @@
 // slightly higher-level than intxml.h.  It defines a series of classes that 
 // represent states of an XML parsing process.  Each state provides routines
 // that allow the caller to proceeed to the next state.  Associated with each 
-// state is an anchor into the document memory.
+// state is a pointer into the document memory.
 
 namespace intxml { namespace parser
 {
@@ -48,7 +48,7 @@ namespace intxml { namespace parser
         {
             text_ptr<chptr_t> tp(p);
             h(tp);
-            while (*tp++);
+            while (*tp) tp++;
             return element<chptr_t>(tp.ptr());
         }
     };
@@ -77,7 +77,7 @@ namespace intxml { namespace parser
         {
             attribute_value_ptr<chptr_t> vp(p);
             h(vp);
-            while (*vp++);
+            while (*vp) vp++;
             parse_whitespace(vp.ptr());
             return attribute<chptr_t>(vp.ptr());
         }
@@ -126,7 +126,7 @@ namespace intxml { namespace parser
         {
             name_ptr<chptr_t> np(p);
             h(np);
-            while (*np++);
+            while (*np) np++;
             chptr_t pnew(np.ptr());
             parse_whitespace(pnew);
             parse<'='>(pnew);
@@ -195,7 +195,7 @@ namespace intxml { namespace parser
             name_ptr<chptr_t> np(p);
             h(np);
             chptr_t pnew(np.ptr());
-            while (*np++);
+            while (*np) np++;
             parse_whitespace(pnew);
             return attribute<chptr_t>(pnew);
         }

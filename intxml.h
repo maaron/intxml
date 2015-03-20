@@ -20,7 +20,7 @@ namespace intxml
     };
 
     template <typename chptr_t>
-    bool end(chptr_t& c)
+    bool is_null(chptr_t& c)
     {
         return *c == 0;
     }
@@ -216,7 +216,7 @@ namespace intxml
     void parse(chptr_t& c)
     {
         if (*c != ch) throw parsing_exception(c);
-        c++;
+        ++c;
     }
 
     template <typename chptr_t>
@@ -235,11 +235,13 @@ namespace intxml
     {
         int entity = 0;
         int digit;
-        while ((digit = *c++) != ';')
+        while ((digit = *c) != ';')
         {
             if (digit < 0x30 || digit > 0x39) throw parsing_exception(c);
             entity = entity * 10 + (digit & 0x0f);
+            ++c;
         }
+        ++c;
         return entity;
     }
 
@@ -248,7 +250,7 @@ namespace intxml
     {
         int entity = 0;
         int digit;
-        while ((digit = *c++) != ';')
+        while ((digit = *c) != ';')
         {
             if (digit >= 0x30 && digit <= 0x39)
             {
@@ -260,7 +262,9 @@ namespace intxml
                 entity = entity * 16 + ((digit & 0x0f) + 9);
             }
             else throw parsing_exception(c);
+            ++c;
         }
+        ++c;
         return entity;
     }
 
@@ -333,8 +337,8 @@ namespace intxml
             *c == '_' || 
             *c == ':')
         {
-            if (end(c)) throw parsing_exception(c);
-            c++;
+            if (is_null(c)) throw parsing_exception(c);
+            ++c;
         }
     }
 
@@ -376,11 +380,11 @@ namespace intxml
 
         do
         {
-            if (end(c)) throw parsing_exception(c);
-            c++;
+            if (is_null(c)) throw parsing_exception(c);
+            ++c;
         } while (*c != start);
 
-        c++;
+        ++c;
     }
 
     // Parses until the end of the start tag is found.  Returns true if the start tag ended with ">", and not "/>", i.e., returns true if the element is non-empty.
@@ -389,15 +393,19 @@ namespace intxml
     {
         while (*c != '/' && *c != '>')
         {
-            if (end(c)) throw parsing_exception(c);
-            c++;
+            if (is_null(c)) throw parsing_exception(c);
+            ++c;
         }
 
-        if (*c++ == '>') return true;
+        if (*c == '>')
+        {
+            ++c;
+            return true;
+        }
         else
         {
             if (*c != '>') throw parsing_exception(c);
-            c++;
+            ++c;
             return false;
         }
     }
@@ -408,8 +416,8 @@ namespace intxml
     {
         while (*c != '<' && *c != '>')
         {
-            if (end(c)) throw parsing_exception(c);
-            c++;
+            if (is_null(c)) throw parsing_exception(c);
+            ++c;
         }
     }
 
@@ -425,7 +433,7 @@ namespace intxml
     template <typename chptr_t>
     void parse_xmldecl_content(chptr_t& c)
     {
-        while (*c != '?') c++;
+        while (*c != '?') ++c;
     }
 
     template <typename chptr_t>
@@ -449,11 +457,11 @@ namespace intxml
         {
             while (*c != '?')
             {
-                if (end(c)) throw parsing_exception(c);
-                c++;
+                if (is_null(c)) throw parsing_exception(c);
+                ++c;
             }
 
-            c++;
+            ++c;
             if (*c == '>') break;
         }
     }
@@ -467,14 +475,14 @@ namespace intxml
         {
             while (*c != '-')
             {
-                if (end(c)) throw parsing_exception(c);
-                c++;
+                if (is_null(c)) throw parsing_exception(c);
+                ++c;
             }
 
-            c++;
+            ++c;
             if (*c == '-')
             {
-                c++;
+                ++c;
                 break;
             }
         }
@@ -487,10 +495,10 @@ namespace intxml
     {
         while (*c != '>')
         {
-            if (end(c)) throw parsing_exception(c);
-            c++;
+            if (is_null(c)) throw parsing_exception(c);
+            ++c;
         }
-        c++;
+        ++c;
     }
 
     template <typename chptr_t>
@@ -501,7 +509,7 @@ namespace intxml
 
         if (*c == '?')
         {
-            c++;
+            ++c;
             parse_xmldecl_content_end(c);
 
             while (true)
@@ -509,11 +517,11 @@ namespace intxml
                 parse_whitespace(c);
                 parse<'<'>(c);
 
-                c++;
+                ++c;
                 if (*c == '?') parse_pi_content_end(c);
                 else if (*c == '!')
                 {
-                    c++;
+                    ++c;
                     if (*c == '-') parse_comment_dash_content_end(c);
                     else parse_doctypedecl_content_end(c);
                 }
@@ -526,7 +534,7 @@ namespace intxml
     template <typename chptr_t>
     void parse_whitespace(chptr_t& c)
     {
-        while (!end(c) && std::isspace(*c)) c++;
+        while (!is_null(c) && std::isspace(*c)) ++c;
     }
 
     template <typename chptr_t>
@@ -560,7 +568,7 @@ namespace intxml
             parse_element_value(c);
 
             if (*c != '<') throw parsing_exception(c);
-            c++;
+            ++c;
 
             if (*c == '/')
             {
@@ -568,7 +576,7 @@ namespace intxml
             }
             else if (*c == '!')
             {
-                c++;
+                ++c;
                 parse<'-'>(c);
                 parse_comment_dash_content_end(c);
             }

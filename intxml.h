@@ -404,8 +404,8 @@ namespace intxml
         }
         else
         {
-            if (*c != '>') throw parsing_exception(c);
-            ++c;
+            parse<'/'>(c);
+            parse<'>'>(c);
             return false;
         }
     }
@@ -517,7 +517,6 @@ namespace intxml
                 parse_whitespace(c);
                 parse<'<'>(c);
 
-                ++c;
                 if (*c == '?') parse_pi_content_end(c);
                 else if (*c == '!')
                 {

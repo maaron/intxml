@@ -576,10 +576,46 @@ namespace intxml
             else if (*c == '!')
             {
                 ++c;
-                parse<'-'>(c);
+                if (*c == '-')
+                {
+                    ++c;
                 parse_comment_dash_content_end(c);
             }
+                else if (*c == '[')
+                {
+                    ++c;
+                    parse<'C'>(c);
+                    parse<'D'>(c);
+                    parse<'A'>(c);
+                    parse<'T'>(c);
+                    parse<'A'>(c);
+                    parse<'['>(c);
+                    parse_cdata_content_end(c);
+                }
+            }
             else return true;
+        }
+    }
+
+    template <typename chptr_t>
+    void parse_cdata_content_end(chptr_t& c)
+    {
+        while (!is_null(c))
+        {
+            if (*c == ']')
+            {
+                ++c;
+                if (*c == ']')
+                {
+                    ++c;
+                    if (*c == '>')
+                    {
+                        ++c;
+                        return;
+                    }
+                }
+            }
+            else ++c;
         }
     }
 
